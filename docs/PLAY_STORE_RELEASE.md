@@ -33,7 +33,7 @@ The build intentionally refuses to create a release artifact until private signi
 
 1. Create or open the app with package name `com.repwise.fitness`.
 2. Set the app type to App, category to Health & Fitness, and use the support email `numlfrazali@gmail.com`.
-3. Publish `public/privacy-policy.html` on a public HTTPS URL and enter that exact URL in Play Console's Privacy policy field. The in-app privacy summary already includes the same policy and support contact.
+3. Publish `docs/privacy-policy.html` on a public HTTPS URL and enter that exact URL in Play Console's Privacy policy field. For a public GitHub repository named `pro-fitness`, GitHub Pages can serve it at `https://96frazali.github.io/pro-fitness/privacy-policy.html` after Pages is enabled with the `docs` folder as its source. The in-app privacy summary already includes the same policy and support contact.
 4. Use `docs/STORE_LISTING.md` for the title and store copy. Upload a 512 × 512 icon, feature graphic, and genuine device screenshots.
 5. Complete App content: privacy policy, Data safety, ads declaration, target audience, content rating, and reviewer access notes.
 6. Upload the signed `.aab` to Internal testing first, test on real phones, then use a closed test before production when required by the developer account.
