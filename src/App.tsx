@@ -1606,7 +1606,7 @@ function App() {
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>(
     () => loadLocalAppState().workoutLogs,
   );
-  const [activeExercise, setActiveExercise] = useState("Lat Pulldown");
+  const [requestedActiveExercise, setActiveExercise] = useState("");
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(
     null,
   );
@@ -1678,6 +1678,13 @@ function App() {
     ];
     return base.map((exercise) => exerciseReplacements[exercise] ?? exercise);
   }, [customExercises, dailyPlan, exerciseReplacements]);
+  // The workout workspace must never render a remembered exercise from an
+  // earlier plan. If a goal, profile, equipment choice, or replacement changes
+  // the plan, fall back to the first exercise that is actually scheduled.
+  const activeExercise = workoutExercises.includes(requestedActiveExercise)
+    ? requestedActiveExercise
+    : (workoutExercises[0] ?? "");
+
   const activeSets = setsByExercise[activeExercise] ?? createStarterSets();
   const completedSets = activeSets.filter((set) => set.done).length;
   const exerciseProgress = useMemo(
@@ -1798,6 +1805,13 @@ function App() {
   };
 
   const startWorkout = () => {
+    if (!workoutExercises.length) {
+      setToast("Your plan is still being prepared. Please try again in a moment.");
+      return;
+    }
+    setActiveExercise((current) =>
+      workoutExercises.includes(current) ? current : workoutExercises[0],
+    );
     setWarmupComplete(false);
     setPage("Workout");
     setWorkoutOpen(true);
@@ -1805,6 +1819,14 @@ function App() {
   };
 
   const addExerciseToWorkout = (exercise: string) => {
+    const exerciseDetails = exerciseData.find((item) => item.name === exercise);
+    if (
+      !exerciseDetails ||
+      !isExerciseAvailable(exerciseDetails, customer?.equipment ?? [])
+    ) {
+      setToast("That movement needs equipment that is not in your available equipment list.");
+      return;
+    }
     setCustomExercises((current) =>
       dailyPlan?.exercises.includes(exercise) || current.includes(exercise)
         ? current
@@ -1822,6 +1844,17 @@ function App() {
     currentExercise: string,
     replacement: string,
   ) => {
+    const replacementDetails = exerciseData.find(
+      (exercise) => exercise.name === replacement,
+    );
+    if (
+      !workoutExercises.includes(currentExercise) ||
+      !replacementDetails ||
+      !isExerciseAvailable(replacementDetails, customer?.equipment ?? [])
+    ) {
+      setToast("Choose an available alternative from today’s workout options.");
+      return;
+    }
     setExerciseReplacements((current) => ({
       ...current,
       [currentExercise]: replacement,
@@ -1854,6 +1887,9 @@ function App() {
     setReadinessCheck(null);
     setWorkoutLogs([]);
     setSetsByExercise({});
+    setCustomExercises([]);
+    setExerciseReplacements({});
+    setActiveExercise("");
     setToast(
       `Welcome, ${profile.name.split(" ")[0]}. Your first daily plan is ready.`,
     );
@@ -2105,7 +2141,9 @@ function App() {
     };
     setWorkoutLogs((current) => [workout, ...current].slice(0, 50));
     setCustomExercises([]);
+    setExerciseReplacements({});
     setSetsByExercise({});
+    setActiveExercise(workoutExercises[0] ?? "");
     setWarmupComplete(false);
     setWorkoutOpen(false);
     setToast(
@@ -4982,7 +5020,8 @@ function WorkoutPage({
     .filter(
       (exercise) =>
         exercise.group === activeInfo?.group &&
-        exercise.name !== activeExercise,
+        exercise.name !== activeExercise &&
+        isExerciseAvailable(exercise, equipment),
     )
     .slice(0, 4);
   const workingSets = sets.filter((set) => set.kind === "Working");
