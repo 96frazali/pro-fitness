@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pro Fitness</string>
+    <string name="title_activity_main">Pro Fitness</string>
+    <string name="package_name">com.repwise.fitness</string>
+    <string name="custom_url_scheme">com.repwise.fitness</string>
+</resources>

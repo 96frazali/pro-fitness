@@ -1,0 +1,40 @@
+@font-face {
+  font-family: "DM Mono";
+  src: local("Cascadia Mono"), local("Consolas"), local("Courier New");
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Sans";
+  src: local("Segoe UI"), local("Arial");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  src: local("Segoe UI Semibold"), local("Segoe UI"), local("Arial");
+  font-display: swap;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  background: #111214;
+  font-size: 101%;
+  -webkit-text-size-adjust: 101%;
+  text-size-adjust: 101%;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #f5f6f3;
+  background: #17181b;
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
