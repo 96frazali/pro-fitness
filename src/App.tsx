@@ -123,6 +123,27 @@ type DailyPlan = {
   prescription: string;
   adjustment: string;
 };
+type WorkoutTemplate = {
+  key: string;
+  title: string;
+  focus: string;
+  groups: string[];
+  exercises: string[];
+  message: string;
+};
+type ScheduleDay = {
+  id: string;
+  label: string;
+  kind: "Workout" | "Recovery";
+  title: string;
+  focus: string;
+  note: string;
+  plan?: DailyPlan;
+};
+type WeeklyPlan = {
+  days: ScheduleDay[];
+  currentPlanId: string;
+};
 type OnboardingDraft = Omit<CustomerProfile, "id" | "createdAt"> & {
   password: string;
 };
@@ -749,7 +770,8 @@ function loadLocalAppState(): LocalAppState {
   }
 }
 
-function createDailyPlan(profile: CustomerProfile): DailyPlan {
+/* Legacy single-day planner replaced by the rotating weekly schedule.
+function createLegacyDailyPlan(profile: CustomerProfile): DailyPlan {
   const currentWeight = Number(profile.weight) || 70;
   const targetWeight = Number(profile.targetWeight) || currentWeight;
   const preferLowImpact =
@@ -869,6 +891,188 @@ function createDailyPlan(profile: CustomerProfile): DailyPlan {
     prescription,
     adjustment,
   };
+}
+*/
+
+function buildWorkoutTemplates(profile: CustomerProfile): WorkoutTemplate[] {
+  const standard: WorkoutTemplate[] = [
+    {
+      key: "chest-triceps",
+      title: "Chest & triceps",
+      focus: "Chest • Triceps",
+      groups: ["Chest", "Triceps"],
+      exercises: ["Barbell Bench Press", "Dumbbell Bench Press", "Machine Chest Press", "Cable Chest Fly", "Push-up", "Diamond Push-up"],
+      message: "Pressing volume for chest and triceps with controlled reps and stable shoulders.",
+    },
+    {
+      key: "back-biceps",
+      title: "Back & biceps",
+      focus: "Back • Biceps",
+      groups: ["Back", "Biceps"],
+      exercises: ["Lat Pulldown", "Chest-supported Row", "One-arm Dumbbell Row", "Seated Cable Row", "Barbell Curl", "Hammer Curl"],
+      message: "A pull session built around controlled rows, vertical pulls, and elbow flexion.",
+    },
+    {
+      key: "legs-calves",
+      title: "Legs & calves",
+      focus: "Quads • Glutes • Calves",
+      groups: ["Quads", "Hamstrings & glutes", "Calves"],
+      exercises: ["Leg Press", "Goblet Squat", "Bulgarian Split Squat", "Romanian Deadlift", "Glute Bridge", "Single-leg Calf Raise"],
+      message: "Train the lower body through knee bend, hip hinge, and calf work without rushing reps.",
+    },
+    {
+      key: "shoulders-core",
+      title: "Shoulders & core",
+      focus: "Shoulders • Core",
+      groups: ["Shoulders", "Core"],
+      exercises: ["Dumbbell Shoulder Press", "Seated Machine Press", "Dumbbell Lateral Raise", "Face Pull", "Dead Bug", "Plank"],
+      message: "Build resilient shoulders and trunk control with deliberate, pain-free range of motion.",
+    },
+    {
+      key: "full-body",
+      title: "Full-body strength",
+      focus: "Legs • Push • Pull • Core",
+      groups: ["Quads", "Chest", "Back", "Core"],
+      exercises: ["Goblet Squat", "Push-up", "One-arm Dumbbell Row", "Glute Bridge", "Plank", "Farmer Carry"],
+      message: "A balanced full-body session that keeps every major movement pattern progressing.",
+    },
+    {
+      key: "posterior-conditioning",
+      title: "Posterior chain & conditioning",
+      focus: "Glutes • Back • Cardio",
+      groups: ["Hamstrings & glutes", "Back", "Fat loss cardio"],
+      exercises: ["Romanian Deadlift", "Hip Thrust", "Cable Pull-through", "Machine Row", "Stationary Bike Intervals", "Incline Treadmill Walk"],
+      message: "Build the posterior chain, then finish with conditioning that fits your available equipment.",
+    },
+  ];
+
+  const strength = standard.map((template, index) => ({
+    ...template,
+    key: `strength-${template.key}`,
+    title: index === 0 ? "Strength push" : index === 1 ? "Strength pull" : index === 2 ? "Strength legs" : template.title,
+    message: "Start with your most stable available compound movement, then complete controlled strength accessories.",
+  }));
+  const fatLoss: WorkoutTemplate[] = [
+    { ...standard[0], key: "burn-upper", title: "Upper-body burn", focus: "Push • Pull • Cardio", groups: ["Chest", "Back", "Fat loss cardio"], exercises: ["Push-up", "One-arm Dumbbell Row", "Machine Chest Press", "Lat Pulldown", "Farmer Carry", "Stationary Bike Intervals"], message: "Alternate strength movements with controlled conditioning to support fat loss while protecting muscle." },
+    { ...standard[2], key: "burn-lower", title: "Lower-body burn", focus: "Legs • Glutes • Cardio", groups: ["Quads", "Hamstrings & glutes", "Fat loss cardio"], exercises: ["Leg Press", "Goblet Squat", "Glute Bridge", "Single-leg Calf Raise", "Low-impact Step-up Circuit", "Stationary Bike Intervals"], message: "A lower-body circuit that raises your heart rate without sacrificing movement quality." },
+    { ...standard[4], key: "burn-full", title: "Full-body metabolic circuit", focus: "Strength • Cardio • Core", groups: ["Quads", "Chest", "Back", "Core", "Fat loss cardio"], exercises: ["Goblet Squat", "Push-up", "One-arm Dumbbell Row", "Dead Bug", "Kettlebell Swing", "Incline Treadmill Walk"], message: "Full-body strength and controlled conditioning for a sustainable calorie burn." },
+    { ...standard[3], key: "burn-core", title: "Core & cardio", focus: "Core • Conditioning", groups: ["Core", "Fat loss cardio"], exercises: ["Dead Bug", "Plank", "Russian Twist", "Stationary Bike Intervals", "Incline Treadmill Walk", "Farmer Carry"], message: "Build core control and aerobic fitness at a pace you can recover from." },
+    { ...standard[1], key: "burn-pull", title: "Pull & carry circuit", focus: "Back • Arms • Conditioning", groups: ["Back", "Biceps", "Fat loss cardio"], exercises: ["Lat Pulldown", "Seated Cable Row", "Hammer Curl", "Farmer Carry", "Stationary Bike Intervals", "Elliptical Steady State"], message: "Pulling strength and loaded carries keep this session full-body without repeating yesterday’s movements." },
+    { ...standard[4], key: "burn-maintain", title: "Strength maintenance", focus: "Legs • Push • Core", groups: ["Quads", "Chest", "Core"], exercises: ["Leg Press", "Machine Chest Press", "Push-up", "Glute Bridge", "Side Plank", "Incline Treadmill Walk"], message: "Strength work helps maintain muscle while your nutrition target drives the weight change." },
+  ];
+  const templates = profile.goal === "Lose weight" ? fatLoss : profile.goal === "Increase strength" ? strength : standard;
+  const count = Math.max(2, Math.min(6, profile.days));
+  // With only two available training days, use full-body coverage first so
+  // legs, push, pull, and core are not left out of the week.
+  return count === 2
+    ? [templates[4], templates[2]]
+    : templates.slice(0, count);
+}
+
+function prefersLowImpact(profile: CustomerProfile) {
+  const weight = Number(profile.weight) || 70;
+  const limitations = profile.limitations.toLowerCase();
+  return profile.goal === "Lose weight" && (
+    weight >= 95 || limitations.includes("knee") || limitations.includes("running")
+  );
+}
+
+function isSuitableForProfile(exercise: Exercise, profile: CustomerProfile) {
+  const limitations = profile.limitations.toLowerCase();
+  const highImpact = new Set(["Jump Rope", "Kettlebell Swing", "Sled Push", "Walking Lunge", "Step-up", "Low-impact Step-up Circuit"]);
+  const kneeSensitive = new Set(["Back Squat", "Hack Squat", "Bulgarian Split Squat", "Walking Lunge", "Step-up", "Jump Rope"]);
+  if (prefersLowImpact(profile) && highImpact.has(exercise.name)) return false;
+  if (limitations.includes("knee") && kneeSensitive.has(exercise.name)) return false;
+  return true;
+}
+
+function uniqueExercises(exercises: Exercise[]) {
+  return [...new Map(exercises.map((exercise) => [exercise.name, exercise])).values()];
+}
+
+function createDailyPlan(profile: CustomerProfile, sessionIndex = 0): DailyPlan {
+  const templates = buildWorkoutTemplates(profile);
+  const template = templates[sessionIndex % templates.length];
+  const targetCount = profile.duration <= 30 ? 4 : profile.duration <= 45 ? 5 : 6;
+  const permitted = (exercise: Exercise) =>
+    exercise.goals.includes(profile.goal) &&
+    isExerciseAvailable(exercise, profile.equipment) &&
+    isSuitableForProfile(exercise, profile);
+  const named = template.exercises
+    .map((name) => exerciseData.find((exercise) => exercise.name === name))
+    .filter((exercise): exercise is Exercise => Boolean(exercise && permitted(exercise)));
+  const groupFallbacks = template.groups.flatMap((group) =>
+    exerciseData.filter((exercise) => exercise.group === group && permitted(exercise)),
+  );
+  const goalFallbacks = exerciseData.filter(permitted);
+  const selectedExercises = uniqueExercises([...named, ...groupFallbacks, ...goalFallbacks]).slice(0, targetCount);
+  const exercises = selectedExercises.map((exercise) => exercise.name);
+  const actualGroups = selectedExercises
+    .map((exercise) => exercise.group)
+    .filter((group, index, groups) => groups.indexOf(group) === index)
+    .slice(0, 3);
+  const hasTemplateFocus = selectedExercises.some((exercise) => template.groups.includes(exercise.group));
+  const setsPerExercise = profile.goal === "Increase strength" ? (profile.experience === "Beginner" ? 3 : 4) : profile.experience === "Beginner" ? 2 : 3;
+  const currentWeight = Number(profile.weight) || 70;
+  const targetWeight = Number(profile.targetWeight) || currentWeight;
+  const lowImpact = prefersLowImpact(profile);
+  const sets = profile.goal === "Lose weight" ? `${exercises.length * 3} circuit sets` : `${exercises.length * setsPerExercise} working sets`;
+  const prescription = profile.goal === "Lose weight"
+    ? lowImpact ? "2–3 rounds • controlled pace • 60–90 sec rest" : "3 rounds • 8–12 reps • 45–75 sec rest"
+    : profile.goal === "Increase strength"
+      ? `${setsPerExercise} sets • 4–8 reps • 2–3 min rest`
+      : `${setsPerExercise} sets • 8–12 reps • 90–120 sec rest`;
+  const adjustment = profile.goal === "Lose weight"
+    ? lowImpact
+      ? `At ${currentWeight} kg and with your movement notes, this plan uses low-impact conditioning and stable patterns while you work toward ${targetWeight} kg.`
+      : `At ${currentWeight} kg, this schedule alternates strength and conditioning while you work toward ${targetWeight} kg.`
+    : `At ${currentWeight} kg, your weekly split, volume, and recovery are adjusted for ${profile.goal.toLowerCase()} and your ${profile.days}-day schedule.`;
+  return {
+    title: hasTemplateFocus ? template.title : "Equipment-matched full body",
+    focus: actualGroups.length ? actualGroups.join(" • ") : template.focus,
+    minutes: `${Math.min(profile.duration, profile.goal === "Lose weight" ? 55 : 70)} min`,
+    exercisesLabel: `${exercises.length} exercises`,
+    sets,
+    exercises,
+    message: hasTemplateFocus ? template.message : "This session switches to movements that match the equipment you have available today.",
+    prescription,
+    adjustment,
+  };
+}
+
+function createWeeklyPlan(profile: CustomerProfile, completedWorkouts: number): WeeklyPlan {
+  const templates = buildWorkoutTemplates(profile);
+  const trainingDays = Math.max(2, Math.min(6, profile.days));
+  const trainingPositions: Record<number, number[]> = {
+    2: [0, 3], 3: [0, 2, 4], 4: [0, 2, 4, 5], 5: [0, 1, 3, 4, 5], 6: [0, 1, 2, 3, 4, 5],
+  };
+  const labels = ["Today", "Tomorrow", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7"];
+  let sessionIndex = completedWorkouts % templates.length;
+  const days = Array.from({ length: 7 }, (_, index) => {
+    if (trainingPositions[trainingDays].includes(index)) {
+      const plan = createDailyPlan(profile, sessionIndex);
+      const template = templates[sessionIndex % templates.length];
+      sessionIndex += 1;
+      return {
+        id: `workout-${index}-${template.key}`,
+        label: labels[index],
+        kind: "Workout" as const,
+        title: plan.title,
+        focus: plan.focus,
+        note: plan.adjustment,
+        plan,
+      };
+    }
+    return {
+      id: `recovery-${index}`,
+      label: labels[index],
+      kind: "Recovery" as const,
+      title: "Recovery & mobility",
+      focus: "Walk • mobility • hydration",
+      note: "No hard lifting today. Keep moving gently, prioritize sleep, and return ready for your next scheduled session.",
+    };
+  });
+  return { days, currentPlanId: days.find((day) => day.kind === "Workout")?.id ?? "" };
 }
 
 function calculateNutritionTargets(profile: CustomerProfile): NutritionTargets {
@@ -1584,6 +1788,9 @@ function App() {
   const [exerciseReplacements, setExerciseReplacements] = useState<
     Record<string, string>
   >({});
+  const [selectedScheduleDayId, setSelectedScheduleDayId] = useState<
+    string | null
+  >(null);
   const [water, setWater] = useState(() => loadLocalAppState().water);
   const [nutrition, setNutrition] = useState<NutritionLog>(
     () => loadLocalAppState().nutrition,
@@ -1660,10 +1867,21 @@ function App() {
   }, [toast]);
 
   const timerLabel = `${Math.floor(timer / 60)}:${String(timer % 60).padStart(2, "0")}`;
-  const dailyPlan = useMemo(
-    () => (customer ? createDailyPlan(customer) : null),
-    [customer],
+  const weeklyPlan = useMemo(
+    () =>
+      customer ? createWeeklyPlan(customer, workoutLogs.length) : null,
+    [customer, workoutLogs.length],
   );
+  const dailyPlan = useMemo(() => {
+    if (!customer) return null;
+    const selectedPlan = weeklyPlan?.days.find(
+      (day) => day.id === selectedScheduleDayId && day.kind === "Workout",
+    )?.plan;
+    const currentPlan = weeklyPlan?.days.find(
+      (day) => day.id === weeklyPlan.currentPlanId,
+    )?.plan;
+    return selectedPlan ?? currentPlan ?? createDailyPlan(customer);
+  }, [customer, selectedScheduleDayId, weeklyPlan]);
   const nutritionTargets = useMemo(
     () => (customer ? calculateNutritionTargets(customer) : null),
     [customer],
@@ -1818,6 +2036,20 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const selectScheduleDay = (day: ScheduleDay) => {
+    if (day.kind === "Recovery" || !day.plan) {
+      setToast("Recovery day selected: take an easy walk, do mobility, and return for your next planned workout.");
+      return;
+    }
+    setSelectedScheduleDayId(day.id);
+    setCustomExercises([]);
+    setExerciseReplacements({});
+    setSetsByExercise({});
+    setActiveExercise("");
+    setWarmupComplete(false);
+    setToast(`${day.label}: ${day.title} selected.`);
+  };
+
   const addExerciseToWorkout = (exercise: string) => {
     const exerciseDetails = exerciseData.find((item) => item.name === exercise);
     if (
@@ -1889,6 +2121,7 @@ function App() {
     setSetsByExercise({});
     setCustomExercises([]);
     setExerciseReplacements({});
+    setSelectedScheduleDayId(null);
     setActiveExercise("");
     setToast(
       `Welcome, ${profile.name.split(" ")[0]}. Your first daily plan is ready.`,
@@ -1897,6 +2130,11 @@ function App() {
 
   const changeGoal = (goal: TrainingGoal) => {
     setTrainingGoal(goal);
+    setSelectedScheduleDayId(null);
+    setCustomExercises([]);
+    setExerciseReplacements({});
+    setSetsByExercise({});
+    setActiveExercise("");
     setCustomer((current) => (current ? { ...current, goal } : current));
   };
 
@@ -2143,6 +2381,7 @@ function App() {
     setCustomExercises([]);
     setExerciseReplacements({});
     setSetsByExercise({});
+    setSelectedScheduleDayId(null);
     setActiveExercise(workoutExercises[0] ?? "");
     setWarmupComplete(false);
     setWorkoutOpen(false);
@@ -2280,6 +2519,9 @@ function App() {
             trainingGoal={trainingGoal}
             workoutExercises={workoutExercises}
             workoutLogs={workoutLogs}
+            weeklyPlan={weeklyPlan}
+            selectedScheduleDayId={selectedScheduleDayId}
+            onSelectScheduleDay={selectScheduleDay}
             planTitle={dailyPlan.title}
             planFocus={dailyPlan.focus}
             planMinutes={dailyPlan.minutes}
@@ -2895,7 +3137,7 @@ function HomePage({
             <h2>{dailyPlan.title}</h2>
             <p>
               {trainingGoal} · Session{" "}
-              {Math.min(customer.days, workoutLogs.length + 1)}/{customer.days}
+              {(workoutLogs.length % customer.days) + 1}/{customer.days}
             </p>
             <div className="today-intelligence-meta">
               <span>
@@ -4960,6 +5202,9 @@ type WorkoutPageProps = {
   trainingGoal: TrainingGoal;
   workoutExercises: string[];
   workoutLogs: WorkoutLog[];
+  weeklyPlan: WeeklyPlan | null;
+  selectedScheduleDayId: string | null;
+  onSelectScheduleDay: (day: ScheduleDay) => void;
   planTitle: string;
   planFocus: string;
   planMinutes: string;
@@ -4992,6 +5237,9 @@ function WorkoutPage({
   trainingGoal,
   workoutExercises,
   workoutLogs,
+  weeklyPlan,
+  selectedScheduleDayId,
+  onSelectScheduleDay,
   planTitle,
   planFocus,
   planMinutes,
@@ -5038,7 +5286,13 @@ function WorkoutPage({
     () => buildWarmupMoves(workoutExercises, equipment),
     [workoutExercises, equipment],
   );
-  const planDays = ["Today", "Next", "Later", "Recovery", "Next week"];
+  const selectedScheduleDay = weeklyPlan?.days.find(
+    (day) => day.id === (selectedScheduleDayId ?? weeklyPlan.currentPlanId),
+  );
+  const startLabel =
+    selectedScheduleDay?.label === "Today"
+      ? "Start today's workout"
+      : `Start ${selectedScheduleDay?.label.toLowerCase() ?? "planned"} workout`;
   const exitWorkout = () => {
     setWorkoutOpen(false);
     setToast(`${trainingGoal} workout saved as draft.`);
@@ -5059,31 +5313,31 @@ function WorkoutPage({
               className="primary-button"
               onClick={onStartWorkout}
             >
-              <Play size={18} fill="currentColor" /> Start today's workout
+              <Play size={18} fill="currentColor" /> {startLabel}
             </button>
           </section>
-          <div className="plan-overview">
-            {planDays.map((day, index) => (
-              <button
-                key={day}
-                className={`plan-day ${index === 0 ? "selected" : ""}`}
-                onClick={() => index === 0 && onStartWorkout()}
-              >
-                <span>{day}</span>
-                <b>
-                  {index === 0
-                    ? planFocus
-                    : index === 3
-                      ? "Rest"
-                      : "Plan adapts"}
-                </b>
-                {index === 0 ? (
-                  <Dumbbell size={17} />
-                ) : (
-                  <ArrowRight size={17} />
-                )}
-              </button>
-            ))}
+          <div className="plan-overview" aria-label="Your seven-day schedule">
+            {weeklyPlan?.days.map((day) => {
+              const isSelected =
+                day.kind === "Workout" &&
+                day.id === (selectedScheduleDayId ?? weeklyPlan.currentPlanId);
+              return (
+                <button
+                  key={day.id}
+                  className={`plan-day ${isSelected ? "selected" : ""} ${day.kind === "Recovery" ? "recovery" : ""}`}
+                  onClick={() => onSelectScheduleDay(day)}
+                >
+                  <span>{day.label}</span>
+                  <b>{day.title}</b>
+                  <small>{day.focus}</small>
+                  {day.kind === "Workout" ? (
+                    <Dumbbell size={17} />
+                  ) : (
+                    <Leaf size={17} />
+                  )}
+                </button>
+              );
+            })}
           </div>
           <section className="workout-preview card">
             <div className="preview-header">
