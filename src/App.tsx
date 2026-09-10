@@ -589,6 +589,48 @@ const equipmentChoices = [
   "Pull-up bar",
 ];
 
+// Some exercise-library labels describe a specific version of an equipment
+// category. The onboarding choices intentionally stay simple, so map those
+// labels back to what a member can actually select.
+const equipmentAliases: Record<string, string> = {
+  "smith machine": "machine",
+  "dip station": "machine",
+  "leg press": "machine",
+  "row machine": "machine",
+  elliptical: "machine",
+  "ez bar": "barbell",
+  chair: "bench",
+};
+
+function normaliseEquipmentName(value: string) {
+  const name = value.trim().toLowerCase();
+  return equipmentAliases[name] ?? name;
+}
+
+function memberHasEquipment(availableEquipment: string[], requirement: string) {
+  const required = normaliseEquipmentName(requirement);
+
+  // Bodyweight movements never require a selected machine or tool.
+  if (required === "bodyweight") return true;
+
+  return availableEquipment.some(
+    (equipment) => normaliseEquipmentName(equipment) === required,
+  );
+}
+
+function isExerciseAvailable(exercise: Exercise, availableEquipment: string[]) {
+  if (exercise.equipment === "Bodyweight") return true;
+
+  // A plus sign means every item is required; "or" offers an alternative.
+  // Example: "Dumbbells + Bench" requires both, while "Bench or chair"
+  // accepts either selected option.
+  return exercise.equipment.split(" + ").every((requirement) =>
+    requirement
+      .split(/\s+or\s+/i)
+      .some((option) => memberHasEquipment(availableEquipment, option)),
+  );
+}
+
 const customerProfileStorageKey = "pro-fitness-profile-v1";
 const legacyCustomerProfileStorageKey = "repwise-demo-profile";
 
@@ -708,11 +750,6 @@ function loadLocalAppState(): LocalAppState {
 }
 
 function createDailyPlan(profile: CustomerProfile): DailyPlan {
-  const has = (item: string) =>
-    item === "Bodyweight" ||
-    profile.equipment.some((equipment) =>
-      equipment.toLowerCase().includes(item.toLowerCase()),
-    );
   const currentWeight = Number(profile.weight) || 70;
   const targetWeight = Number(profile.targetWeight) || currentWeight;
   const preferLowImpact =
@@ -790,19 +827,13 @@ function createDailyPlan(profile: CustomerProfile): DailyPlan {
     : base.names;
   const available = planNames.filter((name) => {
     const exercise = exerciseData.find((item) => item.name === name);
-    if (!exercise) return false;
-    return (
-      has(exercise.equipment.split(" + ")[0]) ||
-      has(exercise.equipment) ||
-      exercise.equipment === "Bodyweight"
-    );
+    return Boolean(exercise && isExerciseAvailable(exercise, profile.equipment));
   });
   const fallback = exerciseData
     .filter(
       (exercise) =>
         exercise.goals.includes(profile.goal) &&
-        (has(exercise.equipment.split(" + ")[0]) ||
-          exercise.equipment === "Bodyweight"),
+        isExerciseAvailable(exercise, profile.equipment),
     )
     .slice(0, 6)
     .map((exercise) => exercise.name);
@@ -4226,17 +4257,31 @@ function buildWarmupMoves(
   const sessionExercises = workoutExercises
     .map((name) => exerciseData.find((exercise) => exercise.name === name))
     .filter((exercise): exercise is Exercise => Boolean(exercise));
-  const primaryExercise = sessionExercises[0] ?? exerciseData[0];
-  const groups = new Set(sessionExercises.map((exercise) => exercise.group));
-  const hasEquipment = (item: string) =>
-    equipment.some((value) => value.toLowerCase() === item.toLowerCase());
-  const findExercise = (name: string, fallback = primaryExercise) =>
-    exerciseData.find((exercise) => exercise.name === name) ?? fallback;
+  const availableSessionExercises = sessionExercises.filter((exercise) =>
+    isExerciseAvailable(exercise, equipment),
+  );
+  const primaryExercise =
+    availableSessionExercises[0] ??
+    exerciseData.find((exercise) => exercise.equipment === "Bodyweight") ??
+    exerciseData[0];
+  const groups = new Set(
+    availableSessionExercises.map((exercise) => exercise.group),
+  );
+  const hasEquipment = (item: string) => memberHasEquipment(equipment, item);
+  const findAvailableExercise = (name: string, fallback = primaryExercise) => {
+    const exercise = exerciseData.find((item) => item.name === name);
+    return exercise && isExerciseAvailable(exercise, equipment)
+      ? exercise
+      : fallback;
+  };
+  const findSessionExercise = (group: string) =>
+    availableSessionExercises.find((exercise) => exercise.group === group) ??
+    primaryExercise;
   const cardioExercise = hasEquipment("Bike")
-    ? findExercise("Stationary Bike Intervals")
+    ? findAvailableExercise("Stationary Bike Intervals")
     : hasEquipment("Treadmill")
-      ? findExercise("Incline Treadmill Walk")
-      : findExercise("Low-impact Step-up Circuit");
+      ? findAvailableExercise("Incline Treadmill Walk")
+      : null;
   const hasUpperPush =
     groups.has("Chest") || groups.has("Shoulders") || groups.has("Triceps");
   const hasUpperPull = groups.has("Back") || groups.has("Biceps");
@@ -4245,19 +4290,19 @@ function buildWarmupMoves(
   const warmup: WarmupMove[] = [
     {
       name:
-        cardioExercise.name === "Stationary Bike Intervals"
+        cardioExercise?.name === "Stationary Bike Intervals"
           ? "Easy bike spin"
-          : cardioExercise.name === "Incline Treadmill Walk"
+          : cardioExercise?.name === "Incline Treadmill Walk"
             ? "Easy treadmill walk"
             : "Low-impact march",
       duration: "2 min",
       target: "Whole body temperature",
       cue: "Keep the pace conversational. You should feel warmer, not tired.",
       equipmentNote:
-        cardioExercise.name === "Low-impact Step-up Circuit"
+        !cardioExercise
           ? "No machine needed"
           : `Using your ${cardioExercise.equipment}`,
-      visualExercise: cardioExercise,
+      visualExercise: cardioExercise ?? primaryExercise,
     },
   ];
 
@@ -4268,7 +4313,7 @@ function buildWarmupMoves(
       target: "Shoulders and chest",
       cue: "Move slowly through a pain-free range; keep your ribs stacked.",
       equipmentNote: "Bodyweight mobility",
-      visualExercise: findExercise("Dumbbell Shoulder Press"),
+      visualExercise: findAvailableExercise("Knee Push-up"),
     });
   }
   if (hasUpperPull) {
@@ -4278,7 +4323,9 @@ function buildWarmupMoves(
       target: "Upper back and lats",
       cue: "Keep your neck long and draw the shoulder blades down before the arms move.",
       equipmentNote: hasEquipment("Cable") ? "Cable: use the lightest load" : "Wall or open floor space",
-      visualExercise: findExercise("Lat Pulldown"),
+      visualExercise: hasEquipment("Cable")
+        ? findAvailableExercise("Lat Pulldown")
+        : findSessionExercise("Back"),
     });
   }
   if (hasLower) {
@@ -4288,7 +4335,7 @@ function buildWarmupMoves(
       target: "Hips, knees, and ankles",
       cue: "Sit between the hips, keep feet planted, and stand tall at the top.",
       equipmentNote: "Bodyweight rehearsal",
-      visualExercise: findExercise("Goblet Squat"),
+      visualExercise: findSessionExercise("Quads"),
     });
   }
   if (groups.has("Core")) {
@@ -4298,7 +4345,7 @@ function buildWarmupMoves(
       target: "Deep core control",
       cue: "Exhale fully, keep your lower back gently connected to the floor.",
       equipmentNote: "Mat or clear floor space",
-      visualExercise: findExercise("Dead Bug"),
+      visualExercise: findAvailableExercise("Dead Bug"),
     });
   }
 
